@@ -307,7 +307,7 @@ void loop() {
         }
         //else toggle CH again if not 0 or 1.4V. would be ch 2 - 4 then.
       } else {
-        if (number_of_triggers) {
+        if (number_of_triggers == 0) {
           int distance = request_pending->somfy_channel_requested - channel_selected;
           if (distance < 0) {
             //e.g. if we're at 4 and need to go to 2, then we have -2, which is 3 steps as 0 and 1 are inbetween
@@ -316,9 +316,9 @@ void loop() {
           number_of_triggers = distance;
         } else {
           trigger_pin_for_ms(PIN_CH, 100);
+          delay(100);
           number_of_triggers--;
         }
-
       }
 
       //TODO: remove code when code is tested.
