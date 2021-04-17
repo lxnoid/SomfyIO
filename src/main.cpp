@@ -239,6 +239,7 @@ float val_ch1_voltage = 0.0;
 
 int channel_selected = -1;
 int channel_requested = -1;
+int number_of_triggers = 0;
 eSomfy_Cmd command_last_executed = s_NONE;
 somfy_command* request_pending = NULL;
 
@@ -287,25 +288,41 @@ void loop() {
   //we have an active request to fullfill
   if (request_pending != NULL) {
     if (request_pending->somfy_channel_requested != channel_selected) {
-      //TODO: detect and switch channels
-      //toggle CH 
-      trigger_pin_for_ms(PIN_CH, 100);
-      //check CH1
-      int adc_ch1 = analogRead(PIN_CH1);
-      delay(5);
-      adc_ch1 = adc_ch1 * 3300 / 1024; //mV
+      //detect and/or switch channels
+      if (channel_selected == -1) {
+        //toggle CH 
+        trigger_pin_for_ms(PIN_CH, 100);
+        //check CH1
+        int adc_ch1 = analogRead(PIN_CH1);
+        delay(5);
+        adc_ch1 = adc_ch1 * 3300 / 1024; //mV
 
-      //if ch1 = 1.4V, all channels/channel 0 selected
-      if ((adc_ch1 >= 1300) && (adc_ch1 <= 1500)) {
-        channel_selected = 0;
-      }
-      //if ch1 = 0.0V, channel 1 selected
-      else if (adc_ch1 <= 100) {
-        channel_selected = 1;
-      }
-      //else toggle CH again if not 0 or 1.4V. would be ch 2 - 4 then.
+        //if ch1 = 1.4V, all channels/channel 0 selected
+        if ((adc_ch1 >= 1300) && (adc_ch1 <= 1500)) {
+          channel_selected = 0;
+        }
+        //if ch1 = 0.0V, channel 1 selected
+        else if (adc_ch1 <= 100) {
+          channel_selected = 1;
+        }
+        //else toggle CH again if not 0 or 1.4V. would be ch 2 - 4 then.
+      } else {
+        if (number_of_triggers) {
+          int distance = request_pending->somfy_channel_requested - channel_selected;
+          if (distance < 0) {
+            //e.g. if we're at 4 and need to go to 2, then we have -2, which is 3 steps as 0 and 1 are inbetween
+            distance += NUMBER_SOMFY_CHANNELS;
+          }
+          number_of_triggers = distance;
+        } else {
+          trigger_pin_for_ms(PIN_CH, 100);
+          number_of_triggers--;
+        }
 
-      // channel_selected = request_pending->somfy_channel_requested;
+      }
+
+      //TODO: remove code when code is tested.
+      channel_selected = request_pending->somfy_channel_requested;
       Serial.printf("loop -> Channels switched to %d\n", channel_selected);
     }
 
