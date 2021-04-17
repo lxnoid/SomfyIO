@@ -195,14 +195,14 @@ void setup() {
 }
 
 void mqtt_callback (char* topic, byte* payload, unsigned int length) {
-  char c_payload[length];
+  char c_payload[length + 1];
   Serial.print("MQTT_callback -> Message arrived in topic: ");
   Serial.println(topic);
-  Serial.print("MQTT_callback -> Message:");
+  Serial.print("MQTT_callback -> Message: ");
   for (unsigned int i = 0; i < length; i++) {
     c_payload[i] = (char)payload[i];
   }
-  c_payload[length - 1] = '\0';
+  c_payload[length] = '\0';
   Serial.print(c_payload);
   Serial.println();
 
@@ -214,11 +214,11 @@ void mqtt_callback (char* topic, byte* payload, unsigned int length) {
     int recv_channel = (int)(topic[r_start + r_len - 1] - 0x30);
 
     if (recv_channel >= 0 && recv_channel <= NUMBER_SOMFY_CHANNELS) {
-      sSomfy_Command req;
-      req.somfy_command_requested = somfy_cmd_ctoe(c_payload);
-      req.somfy_channel_requested= recv_channel;
-      Serial.printf("MQTT_callback -> Channel: %d\n", req.somfy_channel_requested);
-      Serial.printf("MQTT_callback -> Command: %s\n", somfy_cmd_etoc(req.somfy_command_requested));
+      sSomfy_Command* req = (sSomfy_Command*) malloc(sizeof(sSomfy_Command));
+      req->somfy_command_requested = somfy_cmd_ctoe(c_payload);
+      req->somfy_channel_requested = recv_channel;
+      Serial.printf("MQTT_callback -> Channel: %d\n", req->somfy_channel_requested);
+      Serial.printf("MQTT_callback -> Command: %s\n", somfy_cmd_etoc(req->somfy_command_requested));
       qSomfyCommands.push(&req);
     }
   }
@@ -271,9 +271,12 @@ void loop() {
     if (request_pending == NULL) {
       //get next command
       qSomfyCommands.pop(&request_pending);
+      Serial.println("loop -> Queue Popped.");
       //store information for mqtt
       command_last_executed = request_pending->somfy_command_requested;
       channel_requested = request_pending->somfy_channel_requested;
+    } else {
+      Serial.println("loop -> Queue not popped.");
     }
   }
 
@@ -282,12 +285,14 @@ void loop() {
     if (request_pending->somfy_channel_requested != channel_selected) {
       //TODO: detect and switch channels
       channel_selected = request_pending->somfy_channel_requested;
+      Serial.printf("loop -> Channels switched to %d\n", channel_selected);
     }
-    if (request_pending->somfy_command_requested == channel_selected) {
+
+    if (request_pending->somfy_channel_requested == channel_selected) {
       //trigger command for channel as it is set
       uint8_t pin = PIN_CH;
       int t_delay = dig_toggle;
-      
+      Serial.println("loop -> Toggle right pin for button.");
       switch (request_pending->somfy_command_requested)
       {
       case s_UP:
@@ -307,8 +312,13 @@ void loop() {
       digitalWrite(pin, LOW);
       delay(t_delay);
       digitalWrite(pin, HIGH);
+      Serial.println("loop -> Toggled.");
       //clear active request as done
+      free(request_pending);
+      delay(10);
       request_pending = NULL;
+      Serial.println("loop -> Request cleared.");
+      Serial.printf("Queue size: %d\n", qSomfyCommands.getCount());
     }
   }
 }
