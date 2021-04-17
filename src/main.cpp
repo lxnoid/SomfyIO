@@ -86,6 +86,10 @@ eSomfy_Cmd somfy_cmd_ctoe(char* command) {
   return res;
 }
 
+void trigger_pin_for_ms(uint8_t pin, unsigned long t_delay) {
+  digitalWrite(pin, !digitalRead(pin));
+  delay(t_delay);
+}
 // ==================================== SETUP ==================================== 
 
 void setup() {
@@ -284,7 +288,24 @@ void loop() {
   if (request_pending != NULL) {
     if (request_pending->somfy_channel_requested != channel_selected) {
       //TODO: detect and switch channels
-      channel_selected = request_pending->somfy_channel_requested;
+      //toggle CH 
+      trigger_pin_for_ms(PIN_CH, 100);
+      //check CH1
+      int adc_ch1 = analogRead(PIN_CH1);
+      delay(5);
+      adc_ch1 = adc_ch1 * 3300 / 1024; //mV
+
+      //if ch1 = 1.4V, all channels/channel 0 selected
+      if ((adc_ch1 >= 1300) && (adc_ch1 <= 1500)) {
+        channel_selected = 0;
+      }
+      //if ch1 = 0.0V, channel 1 selected
+      else if (adc_ch1 <= 100) {
+        channel_selected = 1;
+      }
+      //else toggle CH again if not 0 or 1.4V. would be ch 2 - 4 then.
+
+      // channel_selected = request_pending->somfy_channel_requested;
       Serial.printf("loop -> Channels switched to %d\n", channel_selected);
     }
 
@@ -309,9 +330,7 @@ void loop() {
       default:
         break;
       }
-      digitalWrite(pin, LOW);
-      delay(t_delay);
-      digitalWrite(pin, HIGH);
+      trigger_pin_for_ms(pin, t_delay);
       Serial.println("loop -> Toggled.");
       //clear active request as done
       free(request_pending);
