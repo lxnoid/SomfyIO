@@ -137,6 +137,7 @@ void setup() {
     for (;;)
       delay(1);
   }
+  delay(100);
   cfile.close();
   
   // DIO -------------------------------------------------------------------------------
@@ -157,12 +158,11 @@ void setup() {
   Serial.println("Connecting to WiFi");
 
   WiFi.disconnect();
-  WiFi.softAPdisconnect(true);
   WiFi.mode(WIFI_STA);
-  WiFi.setSleepMode(WIFI_NONE_SLEEP);
   WiFi.setOutputPower(10.0);
   WiFi.setPhyMode(WIFI_PHY_MODE_11N);
   WiFi.persistent(false);
+  WiFi.setSleepMode(WIFI_NONE_SLEEP);
   
   WiFi.begin(wifiSsid, wifiPassword);
 
@@ -171,7 +171,9 @@ void setup() {
     delay(1000);
   }  
   Serial.println("Connected to WiFi");
-
+  
+  delay(100);
+  
   // MQTT ------------------------------------------------------------------------------
   mqtt_client.setServer(mqttServer, mqttPort);
   mqtt_client.setCallback(mqtt_callback);
@@ -188,18 +190,19 @@ void setup() {
   }
 
   mqtt_client.publish("shades/terasse/cmd/channel99", "Hello World.");
-  mqtt_client.subscribe("shades/terasse/cmd/#");// here is where you later add a wildcard
+  mqtt_client.subscribe("shades/terasse/cmd/#");
+  Serial.println("-- End of Setup --");
 }
 
 void mqtt_callback (char* topic, byte* payload, unsigned int length) {
-  char* c_payload = (char*) malloc(length + 1);
+  char c_payload[length];
   Serial.print("MQTT_callback -> Message arrived in topic: ");
   Serial.println(topic);
   Serial.print("MQTT_callback -> Message:");
   for (unsigned int i = 0; i < length; i++) {
     c_payload[i] = (char)payload[i];
   }
-  c_payload[length] = '\0';
+  c_payload[length - 1] = '\0';
   Serial.print(c_payload);
   Serial.println();
 
@@ -219,7 +222,6 @@ void mqtt_callback (char* topic, byte* payload, unsigned int length) {
       qSomfyCommands.push(&req);
     }
   }
-  free(c_payload);
 }
 
 unsigned long current_millis = 0;
@@ -237,16 +239,14 @@ eSomfy_Cmd command_last_executed = s_NONE;
 somfy_command* request_pending = NULL;
 
 // ==================================== LOOP ==================================== 
-
 void loop() {
   // put your main code here, to run repeatedly:
   mqtt_client.loop();
-  WiFi.status();
   current_millis = millis();
-  yield();
 
-  val_ch1 = analogRead(PIN_CH1);
   val_ch1_voltage = (float)val_ch1 * 3300 / 1042; //3.3V is 1024
+  val_ch1 = analogRead(PIN_CH1);
+  delay(10); //wait here a bit to allow data transfer
 
   if ((int)(current_millis - prev_millis) >= mqtt_status) {
     char mqtt_message[80];
