@@ -1,0 +1,8 @@
+{
+    "wifiSsid"     : "WLAN-AP",  
+    "wifiPassword" : "Password",
+    "mqttServer"   : "mqttbroker",
+    "mqttPort"     : "1883", 
+    "mqttUser"     : "user", 
+    "mqttPassword" : "pass"
+}
