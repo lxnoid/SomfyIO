@@ -50,10 +50,10 @@ typedef enum somfy_cmd {
 #define NUMBER_SOMFY_CHANNELS 4
 
 #define  PIN_CH1 A0 // - 3.0V no led, 1.4V all led, 0V CH1 led
-#define  PIN_CH  D0
-#define  PIN_UP  D5
-#define  PIN_MY  D6
-#define  PIN_DWN D7
+#define  PIN_CH  D5
+#define  PIN_UP  D6
+#define  PIN_MY  D7
+#define  PIN_DWN D8
 
 typedef struct somfy_command {
   eSomfy_Cmd somfy_command_requested = s_NONE;
@@ -89,6 +89,7 @@ eSomfy_Cmd somfy_cmd_ctoe(char* command) {
 void trigger_pin_for_ms(uint8_t pin, unsigned long t_delay) {
   digitalWrite(pin, !digitalRead(pin));
   delay(t_delay);
+  digitalWrite(pin, !digitalRead(pin));
 }
 // ==================================== SETUP ==================================== 
 
@@ -232,10 +233,11 @@ unsigned long current_millis = 0;
 unsigned long prev_millis = 0;
 
 int mqtt_status = 30 * 1000; //30s
-int dig_toggle = 100;
+int dig_toggle = 250;
 
 int val_ch1 = 0;
 float val_ch1_voltage = 0.0;
+float val_ch1_old_voltage = 0.0;
 
 int channel_selected = -1;
 int channel_requested = -1;
@@ -250,6 +252,11 @@ void loop() {
   current_millis = millis();
 
   val_ch1_voltage = (float)val_ch1 * 3300 / 1042; //3.3V is 1024
+  if (val_ch1_voltage != val_ch1_old_voltage)
+  {
+    val_ch1_old_voltage = val_ch1_voltage;
+    Serial.printf("New ADC: %.0f\n", val_ch1_voltage);
+  }
   val_ch1 = analogRead(PIN_CH1);
   delay(10); //wait here a bit to allow data transfer
 
@@ -268,7 +275,6 @@ void loop() {
     prev_millis = current_millis;
   }
 
-  yield();
   if (qSomfyCommands.getCount() > 0) {
     //queue information
     Serial.printf("loop -> Queue count: %d\n", qSomfyCommands.getCount());
@@ -291,7 +297,7 @@ void loop() {
       //detect and/or switch channels
       if (channel_selected == -1) {
         //toggle CH 
-        trigger_pin_for_ms(PIN_CH, 100);
+        trigger_pin_for_ms(PIN_CH, dig_toggle);
         //check CH1
         int adc_ch1 = analogRead(PIN_CH1);
         delay(5);
@@ -316,14 +322,16 @@ void loop() {
           number_of_triggers = distance;
         } else {
           trigger_pin_for_ms(PIN_CH, 100);
-          delay(100);
+          delay(250);
           number_of_triggers--;
         }
       }
 
       //TODO: remove code when code is tested.
-      channel_selected = request_pending->somfy_channel_requested;
-      Serial.printf("loop -> Channels switched to %d\n", channel_selected);
+      //channel_selected = request_pending->somfy_channel_requested;
+      if (channel_selected != -1) {
+        Serial.printf("loop -> Channels switched to %d\n", channel_selected);
+      }
     }
 
     if (request_pending->somfy_channel_requested == channel_selected) {
