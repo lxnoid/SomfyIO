@@ -48,7 +48,7 @@ typedef enum somfy_cmd {
 } eSomfy_Cmd;
 
 
-#define NUMBER_SOMFY_CHANNELS 4
+#define NUMBER_SOMFY_CHANNELS 5
 
 #define  PIN_CH1 D5 // 200Hz pulses while all channels lit, low active while channel 1 selected
 #define  PIN_CH  D0
@@ -298,7 +298,7 @@ void loop() {
         //toggle CH 
         trigger_pin_for_ms(PIN_CH, dig_toggle);
         //check CH1 pulses -> 200Hz with 2,5ms Pulses, Wait time would be like 50ms max and more than 10 pulses
-        delay(200);
+        delay(100);
         Serial.printf("loop -> # of edges %d\n", number_of_edges);
         if (number_of_edges > 0) {
           if (number_of_edges > 20) {
@@ -316,17 +316,28 @@ void loop() {
           number_of_edges = 0;
         }
       } else {
-        if (number_of_triggers == 0) {
-          int distance = request_pending->somfy_channel_requested - channel_selected;
-          if (distance < 0) {
-            //e.g. if we're at 4 and need to go to 2, then we have -2, which is 3 steps as 0 and 1 are inbetween
-            distance += NUMBER_SOMFY_CHANNELS;
+        if (request_pending->somfy_channel_requested != channel_selected) { 
+          Serial.println("loop -> Channel known, switching to the right one.");
+          if (number_of_triggers == 0) {
+            int distance = request_pending->somfy_channel_requested - channel_selected;
+            if (distance < 0) {
+              //e.g. if we're at 4 and need to go to 2, then we have -2, which is 3 steps as 0 and 1 are inbetween
+              distance += NUMBER_SOMFY_CHANNELS;
+            }
+            Serial.printf("loop -> Switching channels n times: %d\n", distance);
+            number_of_triggers = distance;
+          } else {
+            //toggle the channel selection mode
+            trigger_pin_for_ms(PIN_CH, 250);
+            delay(300);
+            //now toggle the channel selection once, the next loop will push it further
+            trigger_pin_for_ms(PIN_CH, 100);
+            //channel will now be changed, store this
+            channel_selected = channel_selected + 1;
+            channel_selected = channel_selected % NUMBER_SOMFY_CHANNELS;
+            number_of_triggers--;
+            Serial.printf("loop -> Switching channel: %d, # triggers: %d\n", channel_selected, number_of_triggers);
           }
-          number_of_triggers = distance;
-        } else {
-          trigger_pin_for_ms(PIN_CH, 100);
-          delay(250);
-          number_of_triggers--;
         }
       }
       
@@ -362,6 +373,7 @@ void loop() {
       free(request_pending);
       delay(10);
       request_pending = NULL;
+      number_of_edges = 0;
       Serial.println("loop -> Request cleared.");
       Serial.printf("Queue size: %d\n", qSomfyCommands.getCount());
     }
