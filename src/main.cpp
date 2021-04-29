@@ -80,6 +80,7 @@ int dig_toggle = 250;
 int channel_selected = -1;
 int channel_requested = -1;
 int number_of_triggers = 0;
+bool triggered_startup = false;
 eSomfy_Cmd command_last_executed = s_NONE;
 somfy_command* request_pending = NULL;
 
@@ -261,6 +262,15 @@ void loop() {
   // put your main code here, to run repeatedly:
   mqtt_client.loop();
   current_millis = millis();
+
+  if(!triggered_startup) {
+    triggered_startup = true;
+    //for the start make sure we command them up first after powerup
+    sSomfy_Command* req = (sSomfy_Command*) malloc(sizeof(sSomfy_Command));
+    req->somfy_command_requested = s_UP;
+    req->somfy_channel_requested = 0;
+    qSomfyCommands.push(&req);
+  }
 
   if ((int)(current_millis - prev_millis) >= mqtt_status) {
     char mqtt_message[80];
