@@ -14,12 +14,13 @@
 // generic setup
 
 void mqtt_callback (char* topic, byte* payload, unsigned int length); 
+void ICACHE_RAM_ATTR ch1_edge_counter_ISR(void);
 
-char wifiSsid[1024]  = "";  
+char wifiSsid[1024]      = "";  
 char wifiPassword[1024]  = "";
-char mqttServer[1024]  = ""; 
-int   mqttPort     = 0; 
-char mqttUser[1024]  = "";
+char mqttServer[1024]    = ""; 
+int  mqttPort            = 0; 
+char mqttUser[1024]      = "";
 char mqttPassword[1024]  = "";
 
 WiFiClient espClient;
@@ -49,8 +50,8 @@ typedef enum somfy_cmd {
 
 #define NUMBER_SOMFY_CHANNELS 4
 
-#define  PIN_CH1 A0 // - 3.0V no led, 1.4V all led, 0V CH1 led
-#define  PIN_CH  D5
+#define  PIN_CH1 D5 // 200Hz pulses while all channels lit, low active while channel 1 selected
+#define  PIN_CH  D0
 #define  PIN_UP  D6
 #define  PIN_MY  D7
 #define  PIN_DWN D8
@@ -65,6 +66,22 @@ cppQueue qSomfyCommands(sizeof(somfy_command), 5, IMPLEMENTATION);
 
 // match state object
 MatchState matchstate;
+
+// ==================================== Globals ==========================================
+
+unsigned int number_of_edges = 0;
+
+unsigned long current_millis = 0;
+unsigned long prev_millis = 0;
+
+int mqtt_status = 30 * 1000; //30s
+int dig_toggle = 250;
+
+int channel_selected = -1;
+int channel_requested = -1;
+int number_of_triggers = 0;
+eSomfy_Cmd command_last_executed = s_NONE;
+somfy_command* request_pending = NULL;
 
 // ==================================== CODE ==================================== 
 
@@ -91,6 +108,7 @@ void trigger_pin_for_ms(uint8_t pin, unsigned long t_delay) {
   delay(t_delay);
   digitalWrite(pin, !digitalRead(pin));
 }
+
 // ==================================== SETUP ==================================== 
 
 void setup() {
@@ -146,12 +164,15 @@ void setup() {
   cfile.close();
   
   // DIO -------------------------------------------------------------------------------
-  // pinMode(PIN_CH1, ANALOG); 
   pinMode(PIN_CH,  OUTPUT); 
   pinMode(PIN_UP,  OUTPUT); 
   pinMode(PIN_MY,  OUTPUT); 
   pinMode(PIN_DWN, OUTPUT); 
 
+  //attach to interrupt for pulse detection
+  attachInterrupt(digitalPinToInterrupt(PIN_CH1), ch1_edge_counter_ISR, FALLING);
+  pinMode(PIN_CH1, INPUT); 
+  
   digitalWrite(PIN_CH, HIGH);
   digitalWrite(PIN_UP, HIGH);
   digitalWrite(PIN_MY, HIGH);
@@ -159,7 +180,7 @@ void setup() {
   
   // Wifi ------------------------------------------------------------------------------
   Serial.begin(115200);
-  delay(1000);
+  delay(100);
   Serial.println("Connecting to WiFi");
 
   WiFi.disconnect();
@@ -229,21 +250,11 @@ void mqtt_callback (char* topic, byte* payload, unsigned int length) {
   }
 }
 
-unsigned long current_millis = 0;
-unsigned long prev_millis = 0;
+void ch1_edge_counter_ISR (void) {
+  number_of_edges = number_of_edges + 1;
+  return;
+}
 
-int mqtt_status = 30 * 1000; //30s
-int dig_toggle = 250;
-
-int val_ch1 = 0;
-float val_ch1_voltage = 0.0;
-float val_ch1_old_voltage = 0.0;
-
-int channel_selected = -1;
-int channel_requested = -1;
-int number_of_triggers = 0;
-eSomfy_Cmd command_last_executed = s_NONE;
-somfy_command* request_pending = NULL;
 
 // ==================================== LOOP ==================================== 
 void loop() {
@@ -251,20 +262,8 @@ void loop() {
   mqtt_client.loop();
   current_millis = millis();
 
-  val_ch1_voltage = (float)val_ch1 * 3300 / 1042; //3.3V is 1024
-  if (val_ch1_voltage != val_ch1_old_voltage)
-  {
-    val_ch1_old_voltage = val_ch1_voltage;
-    Serial.printf("New ADC: %.0f\n", val_ch1_voltage);
-  }
-  val_ch1 = analogRead(PIN_CH1);
-  delay(10); //wait here a bit to allow data transfer
-
   if ((int)(current_millis - prev_millis) >= mqtt_status) {
     char mqtt_message[80];
-    //analog update
-    snprintf(mqtt_message, 80, "{ value: %.0f, unit: mV }\n", val_ch1_voltage);
-    mqtt_client.publish("shades/terasse/state/CH1", mqtt_message, 80);
     // //last channel selected
     snprintf(mqtt_message, 80, "{ channel: %d }\n", channel_selected);
     mqtt_client.publish("shades/terasse/state/CH_SELECT", mqtt_message, 80);
@@ -298,20 +297,24 @@ void loop() {
       if (channel_selected == -1) {
         //toggle CH 
         trigger_pin_for_ms(PIN_CH, dig_toggle);
-        //check CH1
-        int adc_ch1 = analogRead(PIN_CH1);
-        delay(5);
-        adc_ch1 = adc_ch1 * 3300 / 1024; //mV
-
-        //if ch1 = 1.4V, all channels/channel 0 selected
-        if ((adc_ch1 >= 1300) && (adc_ch1 <= 1500)) {
-          channel_selected = 0;
+        //check CH1 pulses -> 200Hz with 2,5ms Pulses, Wait time would be like 50ms max and more than 10 pulses
+        delay(200);
+        Serial.printf("loop -> # of edges %d\n", number_of_edges);
+        if (number_of_edges > 0) {
+          if (number_of_edges > 20) {
+            channel_selected = 0;
+            Serial.println("loop -> more than 20 falling edges found. Assuming 20Hz toggle, channel 0.");
+          }
+          else if (number_of_edges == 1) {
+            channel_selected = 1;
+            Serial.println("loop -> found single falling edge. CH1");
+          }
+          else {
+            Serial.println("loop -> no edges found.");
+            //this would fall through by intention to trigger CH select again.
+          }
+          number_of_edges = 0;
         }
-        //if ch1 = 0.0V, channel 1 selected
-        else if (adc_ch1 <= 100) {
-          channel_selected = 1;
-        }
-        //else toggle CH again if not 0 or 1.4V. would be ch 2 - 4 then.
       } else {
         if (number_of_triggers == 0) {
           int distance = request_pending->somfy_channel_requested - channel_selected;
@@ -326,9 +329,7 @@ void loop() {
           number_of_triggers--;
         }
       }
-
-      //TODO: remove code when code is tested.
-      //channel_selected = request_pending->somfy_channel_requested;
+      
       if (channel_selected != -1) {
         Serial.printf("loop -> Channels switched to %d\n", channel_selected);
       }
