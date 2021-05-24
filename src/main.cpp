@@ -22,6 +22,7 @@ char mqttServer[1024]    = "";
 int  mqttPort            = 0; 
 char mqttUser[1024]      = "";
 char mqttPassword[1024]  = "";
+char mqttClientId[1024]  = "";
 
 WiFiClient espClient;
 PubSubClient mqtt_client(espClient);
@@ -134,6 +135,7 @@ void setup() {
     const char* c_mqttPort     = cjson["mqttPort"]; 
     const char* c_mqttUser     = cjson["mqttUser"]; 
     const char* c_mqttPassword = cjson["mqttPassword"];
+    const char* c_mqttClientId = cjson["mqttClientID"];
 
     Serial.print(c_wifiSsid);
 
@@ -154,6 +156,9 @@ void setup() {
     }
     if (strlen(c_mqttPassword)) { 
       sprintf(mqttPassword, "%s", c_mqttPassword);
+    }
+    if (strlen(c_mqttClientId)) {
+      sprintf(mqttClientId, "%s", c_mqttClientId);
     }
 
   } else {
@@ -190,6 +195,7 @@ void setup() {
   WiFi.setPhyMode(WIFI_PHY_MODE_11N);
   WiFi.persistent(false);
   WiFi.setSleepMode(WIFI_NONE_SLEEP);
+  WiFi.setAutoReconnect(true);
   
   WiFi.begin(wifiSsid, wifiPassword);
 
@@ -207,7 +213,7 @@ void setup() {
   
   while (!mqtt_client.connected()) {
     Serial.println("...Connecting to MQTT");
-    if (mqtt_client.connect("somfyIO", mqttUser, mqttPassword )) {
+    if (mqtt_client.connect(mqttClientId, mqttUser, mqttPassword )) {
       Serial.println("Connected to MQTT");
     } else {
       Serial.print("Failed connecting MQTT with state: ");
@@ -219,6 +225,13 @@ void setup() {
   mqtt_client.publish("shades/terasse/cmd/channel99", "Hello World.");
   mqtt_client.subscribe("shades/terasse/cmd/#");
   Serial.println("-- End of Setup --");
+}
+
+boolean mqtt_reconnect() {
+  if (mqtt_client.connect(mqttClientId, mqttUser, mqttPassword )) {
+    mqtt_client.publish("shades/terasse/cmd/channel99","Hello World, again", true);
+  }
+  return mqtt_client.connected();
 }
 
 void mqtt_callback (char* topic, byte* payload, unsigned int length) {
@@ -256,7 +269,6 @@ void ch1_edge_counter_ISR (void) {
   return;
 }
 
-
 // ==================================== LOOP ==================================== 
 void loop() {
   // put your main code here, to run repeatedly:
@@ -282,6 +294,12 @@ void loop() {
     mqtt_client.publish("shades/terasse/state/COMMAND_LAST", mqtt_message, 80);
 
     prev_millis = current_millis;
+  }
+
+  //check if MQTT and Wifi connected (wifi is set to reconnect on auto)
+  if (!mqtt_client.connected()) {
+    mqtt_reconnect();
+    delay(20);
   }
 
   if (qSomfyCommands.getCount() > 0) {

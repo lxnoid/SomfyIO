@@ -4,5 +4,6 @@
     "mqttServer"   : "mqttbroker",
     "mqttPort"     : "1883", 
     "mqttUser"     : "user", 
-    "mqttPassword" : "pass"
+    "mqttPassword" : "pass",
+    "mqttClientID" : "somfyIO"
 }
