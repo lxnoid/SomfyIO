@@ -230,6 +230,7 @@ void setup() {
 boolean mqtt_reconnect() {
   if (mqtt_client.connect(mqttClientId, mqttUser, mqttPassword )) {
     mqtt_client.publish("shades/terasse/cmd/channel99","Hello World, again", true);
+    mqtt_client.subscribe("shades/terasse/cmd/#");
   }
   return mqtt_client.connected();
 }
@@ -292,14 +293,14 @@ void loop() {
     //last command executed
     snprintf(mqtt_message, 80, "{ command: %s }\n", somfy_cmd_etoc(command_last_executed));
     mqtt_client.publish("shades/terasse/state/COMMAND_LAST", mqtt_message, 80);
-
+  
     prev_millis = current_millis;
   }
 
   //check if MQTT and Wifi connected (wifi is set to reconnect on auto)
   if (!mqtt_client.connected()) {
     mqtt_reconnect();
-    delay(20);
+    delay(200);
   }
 
   if (qSomfyCommands.getCount() > 0) {
