@@ -80,7 +80,11 @@ unsigned long prev_millis = 0;
 int mqtt_status = 30 * 1000; //30s
 int dig_toggle = 250;
 
+#ifndef SINGLE_CHANNEL
 int channel_selected = -1;
+#else
+int channel_selected = 0;
+#endif //SINGLE_CHANNEL
 int channel_requested = -1;
 int number_of_triggers = 0;
 bool triggered_startup = false;
