@@ -51,8 +51,10 @@ typedef enum somfy_cmd {
 
 #define NUMBER_SOMFY_CHANNELS 5
 
+#ifndef SINGLE_CHANNEL
 #define  PIN_CH1 D5 // 200Hz pulses while all channels lit, low active while channel 1 selected
 #define  PIN_CH  D0
+#endif //SINGLE_CHANNEL
 #define  PIN_UP  D6
 #define  PIN_MY  D7
 #define  PIN_DWN D8
@@ -82,6 +84,7 @@ int channel_selected = -1;
 int channel_requested = -1;
 int number_of_triggers = 0;
 bool triggered_startup = false;
+
 eSomfy_Cmd command_last_executed = s_NONE;
 somfy_command* request_pending = NULL;
 
@@ -170,16 +173,20 @@ void setup() {
   cfile.close();
   
   // DIO -------------------------------------------------------------------------------
+#ifndef SINGLE_CHANNEL
   pinMode(PIN_CH,  OUTPUT); 
+#endif //SINGLE_CHANNEL
   pinMode(PIN_UP,  OUTPUT); 
   pinMode(PIN_MY,  OUTPUT); 
   pinMode(PIN_DWN, OUTPUT); 
 
+#ifndef SINGLE_CHANNEL
   //attach to interrupt for pulse detection
   attachInterrupt(digitalPinToInterrupt(PIN_CH1), ch1_edge_counter_ISR, FALLING);
   pinMode(PIN_CH1, INPUT); 
   
   digitalWrite(PIN_CH, HIGH);
+#endif //SINGLE_CHANNEL
   digitalWrite(PIN_UP, HIGH);
   digitalWrite(PIN_MY, HIGH);
   digitalWrite(PIN_DWN, HIGH);
@@ -254,7 +261,12 @@ void mqtt_callback (char* topic, byte* payload, unsigned int length) {
     int r_len   = matchstate.MatchLength;
     int recv_channel = (int)(topic[r_start + r_len - 1] - 0x30);
 
-    if (recv_channel >= 0 && recv_channel <= NUMBER_SOMFY_CHANNELS) {
+#ifndef SINGLE_CHANNEL
+    if (recv_channel >= 0 && recv_channel <= NUMBER_SOMFY_CHANNELS) 
+#else
+    if (recv_channel == 0)
+#endif //SINGLE_CHANNEL
+    {
       sSomfy_Command* req = (sSomfy_Command*) malloc(sizeof(sSomfy_Command));
       req->somfy_command_requested = somfy_cmd_ctoe(c_payload);
       req->somfy_channel_requested = recv_channel;
@@ -321,6 +333,7 @@ void loop() {
 
   //we have an active request to fullfill
   if (request_pending != NULL) {
+#ifndef SINGLE_CHANNEL
     if (request_pending->somfy_channel_requested != channel_selected) {
       //detect and/or switch channels
       if (channel_selected == -1) {
@@ -374,10 +387,11 @@ void loop() {
         Serial.printf("loop -> Channels switched to %d\n", channel_selected);
       }
     }
+#endif //SINGLE_CHANNEL
 
     if (request_pending->somfy_channel_requested == channel_selected) {
       //trigger command for channel as it is set
-      uint8_t pin = PIN_CH;
+      uint8_t pin = 0xFF;
       int t_delay = dig_toggle;
       Serial.println("loop -> Toggle right pin for button.");
       switch (request_pending->somfy_command_requested)
