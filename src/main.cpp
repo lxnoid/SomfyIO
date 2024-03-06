@@ -14,7 +14,7 @@
 // generic setup
 
 void mqtt_callback (char* topic, byte* payload, unsigned int length); 
-void ICACHE_RAM_ATTR ch1_edge_counter_ISR(void);
+void IRAM_ATTR ch1_edge_counter_ISR(void);
 
 char wifiSsid[1024]      = "";  
 char wifiPassword[1024]  = "";
