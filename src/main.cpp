@@ -134,11 +134,13 @@ void trigger_pin_for_ms(uint8_t pin, unsigned long t_delay)
 void setup()
 {
   Serial.begin(115200);
+  Serial.println("-- Setup: Start.");
   // read config
   if (!LittleFS.begin())
   {
     Serial.println("LITTLEFS Mount Failed");
   }
+  Serial.println("-- Setup: Loading json config file.");
   File cfile = LittleFS.open("/config.json", "r");
   if (cfile)
   {
@@ -147,6 +149,7 @@ void setup()
     {
       config_data += char(cfile.read());
     }
+    Serial.println("-- Setup: Read config file.");
     Serial.print(config_data);
     Serial.println(config_data.length());
     Serial.println("...");
@@ -199,13 +202,15 @@ void setup()
   }
   delay(100);
   cfile.close();
-
+  Serial.println("-- Setup: Config file completly parsed.");
   // DIO -------------------------------------------------------------------------------
+  Serial.println("-- Setup: Setup of IO ports.");
   pinMode(PIN_CH, OUTPUT);
   pinMode(PIN_UP, OUTPUT);
   pinMode(PIN_MY, OUTPUT);
   pinMode(PIN_DWN, OUTPUT);
 
+  Serial.println("-- Setup: Setup for interrupt IO.");
   // attach to interrupt for pulse detection
   attachInterrupt(digitalPinToInterrupt(PIN_CH1), ch1_edge_counter_ISR, FALLING);
   pinMode(PIN_CH1, INPUT);
@@ -216,9 +221,8 @@ void setup()
   digitalWrite(PIN_DWN, HIGH);
 
   // Wifi ------------------------------------------------------------------------------
-  Serial.begin(115200);
   delay(100);
-  Serial.println("Connecting to WiFi");
+  Serial.println("-- Setup: Connecting to WiFi");
 
   WiFi.disconnect();
   WiFi.mode(WIFI_STA);
@@ -237,11 +241,13 @@ void setup()
     Serial.println("...Connecting to WiFi");
     delay(1000);
   }
-  Serial.println("Connected to WiFi");
+  Serial.println("-- Setup: Connected to WiFi");
 
   delay(100);
 
+
   // MQTT ------------------------------------------------------------------------------
+  Serial.println("-- Setup: Setup for MQTT");
   mqtt_client.setServer(mqttServer, mqttPort);
   mqtt_client.setCallback(mqtt_callback);
 
